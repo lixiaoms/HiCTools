@@ -163,5 +163,206 @@ for i in range(3):
                 TAD['AT'][i][j].append(int(line.strip().split('\t')[1])/40000)
                 TAD1['AT'][i][j].append(int(line.strip().split('\t')[2])/40000)
 
+##caculate the similarity between TADs identified from down sampled data and raw data
+WSs={}
+MIs={}
+for sf in software:
+    WSs[sf]=np.zeros([3,20])
+    MIs[sf]=np.zeros([3,20])
+for i in range(3):
+    for j in range(20):
+        for sf in software:
+            if sf in software1:
+                WSs[sf][i][j]=WS(TAD[sf][i][j],TAD1[sf][i][j],raw[sf],raw1[sf])
+                MIs[sf][i][j]=MI(size,np.unique(TAD[sf][i][j]+[x+1 for x in TAD1[sf][i][j]]),np.unique(raw[sf]+[x+1 for x in raw1[sf]]))
+            else:
+                WSs[sf][i][j]=WSlist(size,np.unique(TAD[sf][i][j]),np.unique(raw[sf]))
+                MIs[sf][i][j]=MI(size,np.unique(TAD[sf][i][j]),np.unique(raw[sf]))
 
+##caculate the number of TADs
+Num={}
+for sf in software:
+    Num[sf]=np.zeros([4,20])
+for i in range(3):
+    for j in range(20):
+        for sf in software:
+            Num[sf][i+1][j]=len(TAD[sf][i][j])
+for j in range(20):
+        for sf in software:
+            Num[sf][0][j]=len(raw[sf])
 
+##caculate the length of TADs
+Length={}
+for sf in software:
+    Length[sf]=np.zeros([4,20])
+for i in range(3):
+    for j in range(20):
+        for sf in software:
+            if sf in software1:
+                Length[sf][i+1][j]=np.mean(np.array(sorted(TAD1[sf][i][j]))-np.array(sorted(TAD[sf][i][j]))+1)
+            else:
+                bound=np.array(sorted(list(set(np.array(TAD[sf][i][j])[np.array(TAD[sf][i][j])<size]))+[0,size]))
+                Length[sf][i+1][j]=np.mean(bound[1:]-bound[:-1])
+for j in range(20):
+        for sf in software:
+            if sf in software1:
+                Length[sf][0][j]=np.mean(np.array(sorted(raw1[sf]))-np.array(sorted(raw[sf]))+1)
+            else:
+                bound=np.array(sorted(list(set(np.array(raw[sf])[np.array(raw[sf])<size]))+[0,size]))
+                Length[sf][0][j]=np.mean(bound[1:]-bound[:-1])
+
+##caculate the enrichment of chip-seq peaks on TADs boundary
+ctcf=[0 for i in range(size)]
+for line in open('chip-seq/ctcf_IMR90_hg18.bed').readlines():
+    if line.strip().split('\t')[0]=='chr'+str(n):
+        pos=(int(line.strip().split('\t')[1])+int(line.strip().split('\t')[2]))/2
+        ctcf[pos/40000]+=1
+h3k4me3=[0 for i in range(size)]
+for line in open('chip-seq/h3k4me3_IMR90_hg18.bed').readlines():
+    if line.strip().split('\t')[0]=='chr'+str(n):
+        pos=(int(line.strip().split('\t')[1])+int(line.strip().split('\t')[2]))/2
+        h3k4me3[pos/40000]+=1
+h3k36me3=[0 for i in range(size)]
+for line in open('chip-seq/h3k36me3_IMR90_hg18.bed').readlines():
+    if line.strip().split('\t')[0]=='chr'+str(n):
+        pos=(int(line.strip().split('\t')[1])+int(line.strip().split('\t')[2]))/2
+        h3k36me3[pos/40000]+=1
+
+def enrich(bound):
+    ratio=np.array([])
+    for d in range(-10,11):
+        ratio_sum=np.array([])
+        for pos in bound:
+            i=pos+d
+            if i in range(1,size+1):
+                try:
+                    ratio_sum=np.row_stack((ratio_sum,np.array([ctcf[i-1],h3k4me3[i-1],h3k36me3[i-1]])))
+                except:
+                    ratio_sum=np.array([ctcf[i-1],h3k4me3[i-1],h3k36me3[i-1]])
+        if np.mean(ratio_sum,axis=0).size==1:
+            try:
+                ratio=np.row_stack((ratio,ratio_sum))
+            except:
+                ratio=ratio_sum
+        else:
+            try:
+                ratio=np.row_stack((ratio,np.mean(ratio_sum,axis=0)))
+            except:
+                ratio=np.mean(ratio_sum,axis=0)
+    return ratio
+
+def signal(sf):
+    sample=[]
+    if sf in software1:
+        ratio=enrich(np.unique(raw[sf]+[x+1 for x in raw1[sf]]+[0]))
+    else:
+        ratio=enrich(raw[sf]+[0])
+    sample.append(ratio)
+    if sf == 'HS':
+        return sample
+    for i in range(3):
+        if sf in software1:
+            ratio=enrich(np.unique(TAD[sf][i][0]+[x+1 for x in TAD1[sf][i][0]]+[0]))
+            for j in range(1,20):
+                ratio=ratio+enrich(np.unique(TAD[sf][i][j]+[x+1 for x in TAD1[sf][i][j]]+[0]))
+        else:
+            ratio=enrich(TAD[sf][i][0]+[0])
+            for j in range(1,20):
+                ratio=ratio+enrich(TAD[sf][i][j]+[0])
+        sample.append(ratio)
+    return sample
+
+signal_chipseq={}
+for sf in software:
+    signal_chipseq[sf]=signal(sf)
+
+def zscore(signal):
+    peak=np.array(signal[9:12])
+    background=np.array(signal[[0,1,2,3,4,-5,-4,-3,-2,-1]])
+    return (np.mean(peak)-np.mean(background))*(np.std(background))**(-1)
+
+##figure of exsample
+fig,axes=plt.subplots(figsize=(8,8))
+for sf in software:
+    axes.boxplot(MIs[sf].T,showmeans=True,showfliers=False)
+    axes.plot(range(0,4),np.concatenate(([1],np.mean(MIs[sf],axis=1))),label=name[sf])
+plt.legend(loc=3)
+plt.xlim((0,3.2))
+plt.ylim(0,1)
+plt.setp(axes, xticks=range(4),xticklabels=['raw depth','1_10 depth','1_50 depth','1_200 depth'])
+plt.title('Mutual Information',fontsize=20)
+
+fig,axes=plt.subplots(figsize=(8,8))
+for sf in software:
+    axes.boxplot(WSs[sf].T,showmeans=True,showfliers=False)
+    axes.plot(range(0,4),np.concatenate(([1],np.mean(WSs[sf],axis=1))),label=name[sf])
+plt.legend(loc=1)
+plt.xlim((0,3.2))
+plt.setp(axes, xticks=range(4),xticklabels=['raw depth','1_10 depth','1_50 depth','1_200 depth'])
+plt.title('Weight Similarity',fontsize=20)
+
+fig,axes=plt.subplots(figsize=(8,8))
+for sf in software:
+    axes.plot(range(1,5),np.mean(Num[sf],axis=1),'x-',label=name[sf])
+plt.legend(loc=1,handleheight=0)
+plt.xlim((0.8,4.2))
+plt.ylim(0,400)
+plt.setp(axes, xticks=range(1,5),xticklabels=['raw depth','1_10 depth','1_50 depth','1_200 depth'])
+plt.title('Number of TADs',fontsize=20)
+
+fig,axes=plt.subplots(figsize=(8,8))
+for sf in software:
+    axes.plot(range(1,5),np.mean(Length[sf],axis=1),'x-',label=name[sf])
+plt.legend(loc=1)
+plt.xlim((0.8,4.2))
+plt.ylim(0,200)
+plt.setp(axes, xticks=range(1,5),xticklabels=['raw depth','1_10 depth','1_50 depth','1_200 depth'])
+plt.setp(axes, yticks=range(25,200,25),yticklabels=['1M','','3M','','5M','','7M'])
+plt.title('Length of TADs',fontsize=20)
+
+plt.subplots(figsize=(15,6),nrows=1, ncols=3)
+plt.subplot(131)
+fc={'depth_10':[],'depth_200':[],'depth_50':[]}
+for i in range(5):
+    fc['depth_10'].append(zscore(signal_chipseq[software[i]][1][:,0]))
+for i in range(5):
+    fc['depth_50'].append(zscore(signal_chipseq[software[i]][2][:,0]))
+for i in range(5):
+    fc['depth_200'].append(zscore(signal_chipseq[software[i]][3][:,0]))
+plt.bar(range(0,15,3),fc['depth_10'],label='1_10 depth')
+plt.bar(range(1,16,3),fc['depth_50'],label='1_50 depth')
+plt.bar(range(2,17,3),fc['depth_200'],label='1_200 depth')
+plt.ylim(-2,10)
+plt.legend()
+plt.xticks([3*x+1 for x in range(5)],[name[sf] for sf in software],rotation=270)
+plt.title('CTCF peaks z-score')
+plt.subplot(132)
+fc={'depth_10':[],'depth_200':[],'depth_50':[]}
+for i in range(5):
+    fc['depth_10'].append(zscore(signal_chipseq[software[i]][1][:,1]))
+for i in range(5):
+    fc['depth_50'].append(zscore(signal_chipseq[software[i]][2][:,1]))
+for i in range(5):
+    fc['depth_200'].append(zscore(signal_chipseq[software[i]][3][:,1]))
+plt.bar(range(0,15,3),fc['depth_10'],label='1_10 depth')
+plt.bar(range(1,16,3),fc['depth_50'],label='1_50 depth')
+plt.bar(range(2,17,3),fc['depth_200'],label='1_200 depth')
+plt.ylim(-2,10)
+plt.legend()
+plt.xticks([3*x+1 for x in range(5)],[name[sf] for sf in software],rotation=270)
+plt.title('H3K4me3 peaks z-score')
+plt.subplot(133)
+fc={'depth_10':[],'depth_200':[],'depth_50':[]}
+for i in range(5):
+    fc['depth_10'].append(zscore(signal_chipseq[software[i]][1][:,2]))
+for i in range(5):
+    fc['depth_50'].append(zscore(signal_chipseq[software[i]][2][:,2]))
+for i in range(5):
+    fc['depth_200'].append(zscore(signal_chipseq[software[i]][3][:,2]))
+plt.bar(range(0,15,3),fc['depth_10'],label='1_10 depth')
+plt.bar(range(1,16,3),fc['depth_50'],label='1_50 depth')
+plt.bar(range(2,17,3),fc['depth_200'],label='1_200 depth')
+plt.ylim(-2,10)
+plt.legend()
+plt.xticks([3*x+1 for x in range(5)],[name[sf] for sf in software],rotation=270)
+plt.title('H3K36me3 peaks z-score')

@@ -64,7 +64,7 @@ FastHiC is available at http://www.unc.edu/~yunmli/FastHiC/. Expected counts und
 
 4 diffHiC
 
-diffHic24 (v.1.8.1) is an R package available in Bioconductor. We set the size of the neighborhood (flank parameter) at 50kb. Function filterPeaks‘s arguments min.enrich, min.count and min.diag were set to 0.5, 5 and 2L respectively, as suggested in the user guide.
+diffHic (v.1.8.1) is an R package available in Bioconductor. We set the size of the neighborhood (flank parameter) at 50kb. Function filterPeaks‘s arguments min.enrich, min.count and min.diag were set to 0.5, 5 and 2L respectively, as suggested in the user guide.
 
 5 cLoops
 
