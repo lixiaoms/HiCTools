@@ -36,7 +36,7 @@ def WS(op1,ed1,op2,ed2):
 def WSlist(windows,L,l):
     L=sorted(list(set(L[L<windows]))+[0,windows])
     l=sorted(list(set(l[l<windows]))+[0,windows])
-    return(min(WS(L[:-1],[i-1 for i in L[1:]],l[:-1],[i-1 for i in l[1:]]),WS(l[:-1],[i-1 for i in l[1:]],L[:-1],[i-1 for i in L[1:]])))
+    return(WS(L[:-1],[i-1 for i in L[1:]],l[:-1],[i-1 for i in l[1:]]))
 
 ##nickname
 name={}
